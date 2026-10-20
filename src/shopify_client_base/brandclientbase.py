@@ -36,12 +36,12 @@ class BrandClientBase(Client, SanityChecks):
         if products_season_tag:
             assert " " not in products_season_tag, "Prefer no whitespaces in a tag"
         self.products_season_tag = products_season_tag
-        self.credentials = self.load_credentials(self.SHOPNAME)
+        self.shop_credentials = self.load_credentials(self.SHOPNAME)
         super().__init__(
-            shop_name=self.credentials.shop_name,
-            access_token=self.credentials.access_token,
-            google_credential_path=self.credentials.google_credential_path,
-            sheet_id=self.credentials.google_sheet_id,
+            shop_name=self.shop_credentials.shop_name,
+            access_token=self.shop_credentials.access_token,
+            google_credential_path=self.shop_credentials.google_credential_path,
+            sheet_id=self.shop_credentials.google_sheet_id,
         )
 
     def load_credentials(self, shop_name):
