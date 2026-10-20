@@ -1,0 +1,1 @@
+from shopify_client_base.shopify_graphql_client.client import ShopifyGraphqlClient
