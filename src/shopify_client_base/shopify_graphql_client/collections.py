@@ -107,6 +107,14 @@ class CollectionQueries:
             )
         return res[0]
 
+    def collection_by_handle(self, handle):
+        res = self.collections_by_query(f"handle:'{handle}'")
+        if len(res) != 1:
+            raise RuntimeError(
+                f"{'Multiple' if res else 'No'} collections found for handle {handle}: {res}"
+            )
+        return res[0]
+
     def collections_by_title_prefix(self, title_prefix):
         return self.collections_by_query(f"title:{title_prefix}*")
 
