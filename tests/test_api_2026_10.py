@@ -133,6 +133,16 @@ class TestCollectionsReadSources(ApiTestCase):
         self.assertIn("sources {", query)
         self.assertNotIn("ruleSet", query)
 
+    def test_collection_by_handle_returns_the_single_match(self):
+        self.answer({"collections": {"nodes": [{"id": "1", "handle": "jacket"}]}})
+        self.assertEqual(self.client.collection_by_handle("jacket")["id"], "1")
+        self.assertEqual(self.queries[0][1], {"query_string": "handle:'jacket'"})
+
+    def test_collection_by_handle_raises_unless_one_match(self):
+        self.answer({"collections": {"nodes": []}})
+        with self.assertRaises(RuntimeError):
+            self.client.collection_by_handle("jacket")
+
 
 if __name__ == "__main__":
     unittest.main()
