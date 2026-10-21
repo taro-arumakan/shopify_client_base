@@ -3,6 +3,29 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# How a rule-based collection's conditions are read since API 2026-07, where
+# `sources` replaced `ruleSet`. Only tag conditions come back in detail; any
+# other condition shows up as its __typename alone.
+CONDITIONS_SOURCE_FIELDS = """
+    ... on CollectionConditionsSource {
+        id
+        title
+        targetType
+        inclusion {
+            matchType
+            conditions {
+                __typename
+                ... on CollectionSourceInclusionConditionProductTag {
+                    id
+                    matchType
+                    relation
+                    values
+                }
+            }
+        }
+    }
+"""
+
 
 class CollectionQueries:
 
@@ -64,18 +87,14 @@ class CollectionQueries:
                                 title
                             }
                         }
-                        ruleSet {
-                            rules {
-                                column
-                                relation
-                                condition
-                            }
-                            appliedDisjunctively
+                        sources {
+                            __typename
+                            %s
                         }
                     }
                 }
             }
-            """
+            """ % CONDITIONS_SOURCE_FIELDS
         variables = {"query_string": query_string}
         res = self.run_query(query, variables)
         return res["collections"]["nodes"]
@@ -262,6 +281,8 @@ class CollectionQueries:
         return res["collectionUpdate"]["collection"]
 
     def collection_update_rule_set(self, collection_id, rule_set):
+        """Legacy smart-collection rules. `CollectionInput.ruleSet` is deprecated
+        since API 2026-07; prefer collection_update_conditions."""
         query = """
         mutation updateCollection($input: CollectionInput!) {
             collectionUpdate(input: $input) {
@@ -269,14 +290,6 @@ class CollectionQueries:
                     id
                     title
                     handle
-                    ruleSet {
-                        rules {
-                            column
-                            relation
-                            condition
-                        }
-                        appliedDisjunctively
-                    }
                 }
                 userErrors {
                     message
@@ -289,6 +302,72 @@ class CollectionQueries:
             "input": {
                 "id": collection_id,
                 "ruleSet": rule_set,
+            }
+        }
+        res = self.run_query(query, variables)
+        if errors := res["collectionUpdate"]["userErrors"]:
+            raise RuntimeError(f"Collection update failed: {errors}")
+        return res["collectionUpdate"]["collection"]
+
+    def collection_conditions_source(self, collection):
+        """The one conditions source of a collection read by collections_by_query."""
+        sources = [
+            source
+            for source in collection["sources"]
+            if source["__typename"] == "CollectionConditionsSource"
+        ]
+        if len(sources) != 1:
+            raise RuntimeError(
+                f"Expected one conditions source on {collection['title']}, "
+                f"found {len(sources)}: {collection['sources']}"
+            )
+        return sources[0]
+
+    def collection_update_conditions(
+        self,
+        collection_id,
+        source_id,
+        conditions_to_create=(),
+        condition_ids_to_delete=(),
+        match_type=None,
+    ):
+        """Add and remove conditions on one source of a collection in a single update.
+
+        A tag condition, matching products tagged with any of the values:
+            {"productTag": {"relation": "TAGGED_WITH", "values": ["26PF", "26FW"], "matchType": "ANY"}}
+        match_type ("ALL" / "ANY") sets how the source combines its conditions.
+        """
+        query = """
+        mutation updateCollectionConditions($collection: CollectionUpdateInput!) {
+            collectionUpdate(collection: $collection) {
+                collection {
+                    id
+                    title
+                    handle
+                    sources {
+                        __typename
+                        %s
+                    }
+                }
+                userErrors {
+                    message
+                    field
+                }
+            }
+        }
+        """ % CONDITIONS_SOURCE_FIELDS
+        inclusion = {
+            "conditionsToCreate": list(conditions_to_create),
+            "conditionsToDelete": list(condition_ids_to_delete),
+        }
+        if match_type:
+            inclusion["matchType"] = match_type
+        variables = {
+            "collection": {
+                "id": self.sanitize_id(collection_id, "Collection"),
+                "sourcesToUpdate": [
+                    {"condition": {"id": source_id, "inclusion": inclusion}}
+                ],
             }
         }
         res = self.run_query(query, variables)
