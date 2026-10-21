@@ -94,8 +94,8 @@ class Analytics:
             SHOW day, order_name, sale_id, discount_code, line_type, product_title_at_time_of_sale
                 AS TITLE, product_variant_sku_at_time_of_sale AS SKU,
                 product_variant_compare_at_price AS ORIGINAL_PRICE, product_variant_price AS SELLING_PRICE,
-                gross_sales, net_returns, discounts,
-                net_sales, shipping_charges, shipping_returned
+                gross_sales, net_sales_reversals, discounts,
+                net_sales, shipping_charges, shipping_reversals
             GROUP BY day, order_name, sale_id, discount_code, line_type, TITLE, SKU, ORIGINAL_PRICE, SELLING_PRICE
             TIMESERIES day
             SINCE {date_from:%Y-%m-%d} UNTIL {date_to:%Y-%m-%d}
@@ -571,7 +571,7 @@ class Analytics:
         order = f"ORDER BY {by} ASC"
         return {
             "Total sales over time": (
-                "FROM sales SHOW orders, gross_sales, discounts, returns, net_sales, "
+                "FROM sales SHOW orders, gross_sales, discounts, sales_reversals, net_sales, "
                 "shipping_charges, duties, additional_fees, taxes, total_sales "
                 f"TIMESERIES {by} {jpy} {span} {order}"
             ),
@@ -602,7 +602,7 @@ class Analytics:
                 f"GROUP BY new_or_returning_customer TIMESERIES {by} {span} {order}"
             ),
             "Total sales by product": (
-                "FROM sales SHOW net_items_sold, gross_sales, discounts, returns, "
+                "FROM sales SHOW net_items_sold, gross_sales, discounts, sales_reversals, "
                 "net_sales, taxes, total_sales "
                 "GROUP BY product_title, product_vendor, product_type "
                 f"TIMESERIES {by} {jpy} {span} {order}"

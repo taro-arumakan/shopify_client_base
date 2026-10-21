@@ -35,6 +35,10 @@ from shopify_client_base.shopify_graphql_client.variants import Variants
 
 logger = logging.getLogger(__name__)
 
+# Admin API version every request goes to. scripts/check_api_version.py checks
+# our GraphQL operations against a newer version before this is bumped.
+API_VERSION = "2026-10"
+
 
 class ShopifyGraphqlClient(
     Analytics,
@@ -64,7 +68,7 @@ class ShopifyGraphqlClient(
         self.shop_name = shop_name
         self.access_token = access_token
         self.base_url = (
-            f"https://{shop_name}.myshopify.com/admin/api/2026-01/graphql.json"
+            f"https://{shop_name}.myshopify.com/admin/api/{API_VERSION}/graphql.json"
         )
 
     def sanitize_id(self, identifier, prefix="Product"):
