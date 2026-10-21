@@ -168,3 +168,6 @@ cython_debug/
 .claude/.credentials.json
 .claude/.cache/
 .claude/scheduled_tasks.lock
+
+# Admin API schemas cached by scripts/check_api_version.py
+.api_schemas/
