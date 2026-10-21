@@ -7,7 +7,11 @@ sources, and reports per operation:
   BREAKS      valid on the current version, invalid on the target version
   DEPRECATED  uses a field, argument or enum value deprecated on the target
   INVALID     invalid on both versions (a bug, or a string this script
-              could not reconstruct, e.g. heavy %-formatting)
+              could not reconstruct)
+
+Interpolated parts of a string (f-string fields, %-formatting, string.Template)
+are replaced by a placeholder name, and validation errors that mention it are
+ignored, so the rest of such an operation is still checked.
 
 Usage, from a directory whose .env holds `<shop>-ACCESS_TOKEN`:
 
@@ -43,6 +47,7 @@ from graphql import (
 from graphql.type import GraphQLEnumType
 
 SKIP_DIRS = {".venv", "deprecated", ".git", "node_modules"}
+PLACEHOLDER = "PLACEHOLDER__"
 
 
 def fetch_schema(shop, token, version, schema_dir: pathlib.Path) -> GraphQLSchema:
@@ -60,19 +65,22 @@ def fetch_schema(shop, token, version, schema_dir: pathlib.Path) -> GraphQLSchem
             raise RuntimeError(f"introspection failed on {version}: {body['errors']}")
         schema_dir.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(body["data"]))
-    return build_client_schema(json.loads(path.read_text()))
+    # Shopify's schema breaks a few interface-deprecation rules that graphql-core
+    # 3.3 enforces before validating, so take it as valid.
+    return build_client_schema(json.loads(path.read_text()), assume_valid=True)
 
 
 def to_graphql(source):
     """Turn a Python string holding a GraphQL operation into parseable GraphQL.
 
     Formatting placeholders become a bare name, which keeps the document
-    parseable and only costs a validation error where the placeholder sits in
-    a position that needs a value.
+    parseable in most positions.
     """
-    source = re.sub(r"%\(\w+\)s|%[sdr]", "X", source)
+    source = re.sub(r"%\(\w+\)s|%[sdr]", PLACEHOLDER, source)
     if "$$" in source:  # string.Template
-        source = re.sub(r"\$\w+", "X", source.replace("$$", "\0")).replace("\0", "$")
+        source = re.sub(r"\$\w+", PLACEHOLDER, source.replace("$$", "\0")).replace(
+            "\0", "$"
+        )
     return source
 
 
@@ -101,7 +109,7 @@ def find_operations(roots):
             for node in ast.walk(tree):
                 if isinstance(node, ast.JoinedStr):
                     text = "".join(
-                        v.value if isinstance(v, ast.Constant) else "X"
+                        v.value if isinstance(v, ast.Constant) else PLACEHOLDER
                         for v in node.values
                     )
                 elif isinstance(node, ast.Constant) and isinstance(node.value, str):
@@ -186,6 +194,10 @@ def variable_input_deprecations(schema, document):
     return found
 
 
+def real_errors(errors):
+    return [e for e in errors if PLACEHOLDER not in e.message]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("paths", nargs="+")
@@ -210,8 +222,8 @@ def main():
             counts["UNPARSED"] += 1
             print(f"UNPARSED   {where}\n    {str(e).splitlines()[0]}")
             continue
-        errors_now = validate(current, document)
-        errors_target = validate(target, document)
+        errors_now = real_errors(validate(current, document))
+        errors_target = real_errors(validate(target, document))
         if errors_target and not errors_now:
             counts["BREAKS"] += 1
             print(f"BREAKS     {where}")
