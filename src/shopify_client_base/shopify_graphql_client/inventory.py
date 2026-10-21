@@ -1,4 +1,5 @@
 import logging
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
@@ -132,7 +133,7 @@ class Inventory:
     def activate_inventory_item(self, inventory_item_id, location_id, available=0):
         query = """
         mutation ActivateInventoryItem($inventoryItemId: ID!, $locationId: ID!%s) {
-          inventoryActivate(inventoryItemId: $inventoryItemId, locationId: $locationId%s) {
+          inventoryActivate(inventoryItemId: $inventoryItemId, locationId: $locationId%s) @idempotent(key: "%s") {
                 inventoryLevel {
                     id
                     quantities(names: ["available"]) {
@@ -153,7 +154,8 @@ class Inventory:
             }
         }
         """ % (
-            (", $available: Int", ", available: $available") if available else ("", "")
+            *((", $available: Int", ", available: $available") if available else ("", "")),
+            uuid.uuid4(),
         )
         variables = {
             "inventoryItemId": inventory_item_id,
@@ -223,7 +225,7 @@ class Inventory:
                                     locationId: $locationId,
                                     quantity: $quantity,
                                     changeFromQuantity: null}]}
-            ) {
+            ) @idempotent(key: "%s") {
                 inventoryAdjustmentGroup {
                     id
                     changes {
@@ -240,7 +242,7 @@ class Inventory:
                 }
             }
         }
-        """
+        """ % uuid.uuid4()
         variables = {
             "inventoryItemId": inventory_item_id,
             "locationId": location_id,
